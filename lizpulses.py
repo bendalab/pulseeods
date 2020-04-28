@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from thunderfish.dataloader import load_data
 from thunderfish.bestwindow import best_window
+import pulse_tracker_helper as pth
 
 # load data:
 filename = sys.argv[1]
@@ -17,8 +18,20 @@ time = np.arange(len(data))/samplerate  # in seconds
 plt.plot(time, data)
 plt.show()
 
+def extract_eod_times(data,thresh,peakwidth):
+    
+    print('extracting times')
 
-def extract_pulsefish(data, samplerate, **kwargs):
+    pk, tr = ed.detect_peaks(data, thresh)
+
+    if len(pk)==0:
+        return []
+    else:
+        peaks = pth.makeeventlist(pk,tr,data,peakwidth)
+        peakindices, _, _ = pth.discardnearbyevents(peaks[0],peaks[1],peakwidth)
+        return peakindices
+
+def extract_pulsefish(data, samplerate):
     """
     This is what you should implement! Don't worry about wavefish for now.
     
@@ -37,8 +50,12 @@ def extract_pulsefish(data, samplerate, **kwargs):
     eod_times: list of 1D arrays
         For each detected fish the times of EOD peaks in seconds.
     """
+    # 1. extract peaks
+    idx_arr, elec_masks = extract_eod_times(data,peak_detection_threshold,peakwidth/dt)
+    # 2. cluster the extracted eods.
+    
     return [], []
 
 
 # pulse extraction:
-mean_eods, eod_times = extract_pulsefish(data, samplerate, **kwargs)
+mean_eods, eod_times = extract_pulsefish(data, samplerate)
