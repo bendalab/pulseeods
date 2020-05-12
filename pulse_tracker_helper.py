@@ -30,9 +30,13 @@ def makeeventlist(main_event_positions,side_event_positions,data,event_width=20,
     main_y = data[main_event_positions]
     # empty placeholders, filled in the next step while iterating over the properties of single main
     main_h = np.zeros(len(main_event_positions))
+    main_w = np.zeros(len(main_event_positions))
+    main_xt = np.zeros(len(main_event_positions))
+
     main_real = np.ones(len(main_event_positions))
     # iteration over the properties of the single main
-    for ind,(x, y, h, r) in enumerate(np.nditer([main_x, main_y, main_h, main_real], op_flags=[["readonly"],['readonly'],['readwrite'],['readwrite']])):
+    for ind,(x, y, h, r, w, xt) in enumerate(np.nditer([main_x, main_y, main_h, main_real, main_w, main_xt], op_flags=[["readonly"],['readonly'],['readwrite'],['readwrite'],['readwrite'],['readwrite']])):
+        
         l_side_ind = ind - mainfirst
         r_side_ind = l_side_ind + 1
         try:
@@ -53,24 +57,34 @@ def makeeventlist(main_event_positions,side_event_positions,data,event_width=20,
                     r[...] = False
             elif max((l_distance),(r_distance)) <= event_width:
                     h[...] = max(abs(y-l_side_y),abs(y-r_side_y))  #calculated using absolutes in case of for example troughs instead of peaks as main events 
+                    w[...] = [l_distance,r_distance][np.argmax([abs(y-l_side_y),abs(y-r_side_y)])]
+                    xt[...] = x + [-l_distance,r_distance][np.argmax([abs(y-l_side_y),abs(y-r_side_y)])]
             else:
                     if (l_distance)<(r_distance): # evaluated only when exactly one side event is out of reach of the event width. Then the closer event will be the correct event
                         h[...] = abs(y-l_side_y)
+                        w[...] = l_distance
+                        xt[...] = x + -l_distance
                     else:
                         h[...] = abs(y-r_side_y)
+                        w[...] = r_distance
+                        xt[...] = x + r_distance
         # check corner cases
         elif l_side_ind == -1:
             if r_distance > event_width:
                 r[...] = False
             else:
                 h[...] = y-r_side_y
+                w[...] = r_distance
+                xt[...] = x + r_distance
         elif r_side_ind == len(side_event_positions):
             if l_distance> event_width:
                 r[...] = False
             else:
                 h[...] = y-l_side_y
+                w[...] = l_distance
+                xt[...] = x - l_distance
     # generate return array and discard all events that are not marked as real
-    EOD_events = np.array([main_x, main_y, main_h], dtype = np.float)[:,main_real==1]
+    EOD_events = np.array([main_x, main_y, main_h, main_w, main_xt], dtype = np.float)[:,main_real==1]
     return EOD_events
 
 def discardnearbyevents(event_locations, event_heights, min_distance):
@@ -105,7 +119,7 @@ def discardnearbyevents(event_locations, event_heights, min_distance):
     unchanged = False
     counter = 0
     event_indices = np.arange(0,len(event_locations)+1,1)
-    while unchanged == False:# and counter<=200:
+    while unchanged == False:
        x_diffs = np.diff(event_locations)
        events_delete = np.zeros(len(event_locations))
        for i, diff in enumerate(x_diffs):
@@ -123,4 +137,14 @@ def discardnearbyevents(event_locations, event_heights, min_distance):
        if counter > 2000:
            print('Warning: unusual many discarding steps needed, unusually dense events')
            pass
-    return event_indices, event_locations, event_heights
+    return event_indices.astype('int'), event_locations, event_heights
+
+def discard_connecting_eods(pks, trs, hs, ws):
+    # pk should be unique but tr is maybe not
+    # for each tr, select peaks that result in biggest hight.
+    keep_idxs = np.ones(len(pks))
+    for tr in np.unique(trs):
+        if len(trs[trs==tr])>1:
+            #keep only highest one.
+            keep_idxs[np.where(trs==tr)[0][np.argmin(hs[trs==tr])]] = 0
+    return pks[keep_idxs.astype('bool')].astype('int'), trs[keep_idxs.astype('bool')].astype('int'), hs[keep_idxs.astype('bool')], ws[keep_idxs.astype('bool')]
